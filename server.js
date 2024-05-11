@@ -18,7 +18,7 @@ const userConnections = new Map();
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocket.Server({ server port:process.env.PORT});
 
 
 const PORT = process.env.PORT || 5000;
