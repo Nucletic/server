@@ -40,6 +40,7 @@ server.listen(8000, () => {
 // WebSocket Code
 wss.on('connection', async (ws, req) => {
   let userId;
+  console.log('connected')
 
   ws.on('message', async (message) => {
     const { userId: messageUserId, idToken, activityStatus, recipientId, type, offer, answer, candidate, replyMessage, LikerUUID, TaleOwnerUUID } = JSON.parse(message);
