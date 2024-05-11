@@ -31,7 +31,7 @@ app.use('/', routes); app.listen(PORT, () => {
   console.log('Server is listening on Port:', PORT);
 });
 
-server.listen(process.env.PORT, () => {
+server.listen(8000, () => {
   console.log('websocket server started on port 8000');
 });
 
