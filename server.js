@@ -21,7 +21,7 @@ const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT;
 
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
@@ -31,7 +31,7 @@ app.use('/', routes); app.listen(PORT, () => {
   console.log('Server is listening on Port:', PORT);
 });
 
-server.listen(8000, () => {
+server.listen(process.env.PORT, () => {
   console.log('websocket server started on port 8000');
 });
 
