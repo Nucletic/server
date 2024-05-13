@@ -581,8 +581,8 @@ exports.AcceptChatmateRequest = async (req, res, next) => {
       const senderChatmates = (senderDoc.exists ? senderDoc.data().chatmates : []) || [];
       const receiverChatmates = (receiverDoc.exists ? receiverDoc.data().chatmates : []) || [];
 
-      const updatedSenderChatmates = [...senderChatmates, { userId: ReciverUUID, name: receiverName, profileImage: receiverProfileImage, }];
-      const updatedReceiverChatmates = [...receiverChatmates, { userId: SenderUUID, name: senderName, profileImage: senderProfileImage, }];
+      const updatedSenderChatmates = [...senderChatmates, { userId: ReciverUUID, name: receiverName, profileImage: receiverProfileImage || null, }];
+      const updatedReceiverChatmates = [...receiverChatmates, { userId: SenderUUID, name: senderName, profileImage: senderProfileImage || null, }];
 
       transaction.update(senderFollowersRef, { chatmates: updatedSenderChatmates });
       transaction.update(receiverFollowersRef, { chatmates: updatedReceiverChatmates });
@@ -956,7 +956,7 @@ exports.GetTales = async (req, res, next) => {
                 tale: data.tale,
                 username: data.username,
                 userId: data.userId,
-                profileImage: data.profileImage,
+                profileImage: data.profileImage || null,
               });
             }
           }
@@ -971,7 +971,7 @@ exports.GetTales = async (req, res, next) => {
         tale: myTales,
         username: userDoc.data().username,
         userId: userDoc.data().userId,
-        profileImage: userDoc.data().profileImage,
+        profileImage: userDoc.data().profileImage || null,
       },
     });
 
@@ -998,7 +998,7 @@ exports.UpdateSeenBy = async (req, res, next) => {
           return {
             ...tale,
             seenBy: [...(tale.seenBy || []), {
-              profileImage: WatcherData.profileImage,
+              profileImage: WatcherData.profileImage || null,
               username: WatcherData.username,
               userId: WatcherUUID,
               timestamp: Date.now()
@@ -1089,7 +1089,7 @@ exports.getBlockedAccounts = async (req, res, next) => {
           continue;
         } else {
           accounts.push({
-            profileImage: querySnapshot.docs[0].data().profileImage,
+            profileImage: querySnapshot.docs[0].data().profileImage || null,
             username: querySnapshot.docs[0].data().username,
             userId: userId,
           });
