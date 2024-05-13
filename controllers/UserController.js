@@ -548,7 +548,8 @@ exports.getAllNotifications = async (req, res, next) => {
 exports.AcceptChatmateRequest = async (req, res, next) => {
   try {
     const { SenderUUID, ReciverUUID } = req.body;
-
+    console.log(SenderUUID, ReciverUUID);
+    
     const senderSnapshot = await DB.collection('users').where('userId', '==', SenderUUID).get();
     const receiverSnapshot = await DB.collection('users').where('userId', '==', ReciverUUID).get();
 
