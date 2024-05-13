@@ -30,6 +30,7 @@ router.get('/users/getContactDetails/:CustomUUID', userController.verifyToken, u
 router.get('/users/getCallOffer/:DocId', userController.verifyToken, userController.grantAccess('readOwn', 'CallOffer'), userController.getCallOffer);
 router.post('/users/AddTale', userController.verifyToken, userController.grantAccess('createOwn', 'Tale'), upload.array('image'), userController.AddTale);
 router.get('/users/GetTales/:page/:pageSize', userController.verifyToken, userController.grantAccess('readAny', 'Tale'), userController.GetTales);
+
 router.put('/users/UpdateSeenBy', userController.verifyToken, userController.grantAccess('updateAny', 'SeenBy'), userController.UpdateSeenBy);
 router.get('/users/getChatSharedMedia/:chatId', userController.verifyToken, userController.grantAccess('readOwn', 'Messages'), userController.getChatSharedMedia);
 router.put('/users/blockUser/:BlockUUID', userController.verifyToken, userController.grantAccess('updateOwn', 'BlockList'), userController.BlockUser);

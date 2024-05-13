@@ -13,6 +13,7 @@ exports.roles = (function () {
     .readOwn('CallOffer')
     .updateOwn('CallOffer')
     .createOwn('Tale')
+    .updateOwn('Tale')
     .readAny('Tale')
     .updateAny('SeenBy')
     .readOwn('Messages')

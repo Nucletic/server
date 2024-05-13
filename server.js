@@ -114,7 +114,6 @@ const updateActivityStatus = async (ws, activityStatus, messageUserId) => {
   }
 }
 
-
 const handleAnswer = async (ws, recipientId, answer, messageUserId) => {
   try {
     console.log('sending back the answer to offer owner', recipientId);
