@@ -496,7 +496,7 @@ exports.sendChatmateRequest = async (req, res, next) => {
     await notificationRef.set({
       notificationId: 'notification_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
       senderName: username,
-      profileImage: profileImage,
+      profileImage: profileImage || null,
       senderId: senderUUID,
       receiverId: receiverUUID,
       notificationType: 'Chatmate_Request',
@@ -802,7 +802,7 @@ exports.getContactDetails = async (req, res, next) => {
     return res.status(200).json({
       userDetails: {
         username: username,
-        profileImage: profileImage,
+        profileImage: profileImage || null,
         activityStatus: activityStatus,
         lastActive: lastActive,
         blockedFromOurSide: blockedFromOurSide,
@@ -1203,7 +1203,7 @@ exports.addRecentSearches = async (req, res, next) => {
       name: name,
       username: username,
       userId: userId,
-      profileImage: profileImage,
+      profileImage: profileImage || null,
       searchAdded: new Date(),
     }
 
