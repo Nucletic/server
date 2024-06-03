@@ -51,7 +51,6 @@ exports.register = async (req, res, next) => {
   try {
     const { name, username, email, password } = req.body;
 
-    console.log('asdfasdf')
     const decryptedEmail = essentials.decryptData(email, SECRET_KEY);
     const decryptedPassword = essentials.decryptData(password, SECRET_KEY);
 
@@ -88,6 +87,7 @@ exports.register = async (req, res, next) => {
         Location: true,
         blockedUsers: [],
         mutedUsers: [],
+        lastUsernameUpdate: new Date(),
         lastActive: admin.firestore.FieldValue.serverTimestamp(),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
       });
@@ -296,6 +296,7 @@ exports.editProfile = async (req, res, next) => {
   try {
     const user = req.user;
     const { bio, Interests, username, name } = req.body;
+    console.log(bio, Interests, username, name)
 
     let bannerImage;
     let profileImage;
@@ -321,28 +322,36 @@ exports.editProfile = async (req, res, next) => {
     if (bannerUrl) updateFields.bannerImage = bannerUrl;
     if (profileUrl) updateFields.profileImage = profileUrl;
 
-    const querySnapshot = await DB.collection('users').where('username', '==', username).get();
 
-    if (querySnapshot.empty) {
-
-      await DB.collection('users').doc(user.uid).update(updateFields);
-
+    let querySnapshot;
+    if (name) {
       await AUTH.updateUser(user.uid, {
         displayName: name,
       });
-
-      return res.status(200).json({
-        message: 'userUpdated',
-        userUpdated: true,
-      })
-    } else {
-
-      return res.status(200).json({
-        message: 'duplicateUsername',
-        userUpdated: true,
-      })
-
     }
+    if (username) {
+      querySnapshot = await DB.collection('users').where('username', '==', username).get();
+
+      if (querySnapshot.empty) {
+        await DB.collection('users').doc(user.uid).update(updateFields); 
+      } else {
+        return res.status(200).json({
+          message: 'duplicateUsername',
+          userUpdated: true,
+        })
+
+      }
+    } else {
+      await DB.collection('users').doc(user.uid).update(updateFields);
+    }
+
+    
+    return res.status(200).json({
+      message: 'userUpdated',
+      userUpdated: true,
+    })
+
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: error.message });
@@ -380,7 +389,7 @@ exports.requestEmailChange = async (req, res, next) => {
       // This must be true for email link sign-in.
       handleCodeInApp: true,
       android: {
-        packageName: 'com.nucletic.time',
+        packageName: 'com.nucletic.locbridge',
         installApp: true,
         minimumVersion: '12',
       },
@@ -549,7 +558,7 @@ exports.AcceptChatmateRequest = async (req, res, next) => {
   try {
     const { SenderUUID, ReciverUUID } = req.body;
     console.log(SenderUUID, ReciverUUID);
-    
+
     const senderSnapshot = await DB.collection('users').where('userId', '==', SenderUUID).get();
     const receiverSnapshot = await DB.collection('users').where('userId', '==', ReciverUUID).get();
 
