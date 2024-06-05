@@ -5,7 +5,7 @@ const { roles } = require('../roles');
 const uuid = require('uuid');
 const WebSocket = require('ws');
 const { recommendUsers } = require('../UserRecommendationSystem');
-const { arrayUnion, arrayRemove } = require('firebase/firestore');
+const { arrayUnion, arrayRemove, doc } = require('firebase/firestore');
 const wss = new WebSocket.Server({ port: 8080 });
 
 const MailConfig = {
@@ -95,7 +95,7 @@ exports.register = async (req, res, next) => {
       const verificationLink = await AUTH.generateEmailVerificationLink(decryptedEmail);
 
       const emailContent = `
-      Please verify your email address by clicking the following link:
+      Please verify your email address by clicking the following link for LocBridge Email Verification:
       ${verificationLink}
       `;
 
@@ -295,21 +295,39 @@ exports.getUserProfile = async (req, res, next) => {
 exports.editProfile = async (req, res, next) => {
   try {
     const user = req.user;
-    const { bio, Interests, username, name } = req.body;
-    console.log(bio, Interests, username, name)
+    const { bio, Interests, username, name, bannerImage, profileImage } = req.body;
 
-    let bannerImage;
-    let profileImage;
+    let newBanner;
+    let newProfile;
     for (let i = 0; i < req.files.length; i++) {
       if (req.files[i].originalname === 'profileImage.jpeg') {
-        profileImage = req.files[i];
+        newProfile = req.files[i];
       } else if (req.files[i].originalname === 'bannerImage.jpeg') {
-        bannerImage = req.files[i];
+        newBanner = req.files[i];
       }
     }
 
-    const bannerUrl = await uploadUserImage(bannerImage, user.uid);
-    const profileUrl = await uploadUserImage(profileImage, user.uid);
+    const bucket = STORAGE.bucket();
+
+    if (newBanner) {
+      if (bannerImage) {
+        const filePath = bannerImage.split('timecapsulemessenger.appspot.com/')[1].split('?')[0];
+        const fileRef = bucket.file(filePath);
+        await fileRef.delete();
+      }
+    }
+
+    if (newProfile) {
+      if (profileImage) {
+        const filePath = profileImage.split('timecapsulemessenger.appspot.com/')[1].split('?')[0];
+        const fileRef = bucket.file(filePath);
+        await fileRef.delete();
+      }
+    }
+
+
+    const bannerUrl = await uploadUserImage(newBanner, user.uid);
+    const profileUrl = await uploadUserImage(newProfile, user.uid);
 
     const updateFields = {};
     if (name) updateFields.name = name;
@@ -333,7 +351,7 @@ exports.editProfile = async (req, res, next) => {
       querySnapshot = await DB.collection('users').where('username', '==', username).get();
 
       if (querySnapshot.empty) {
-        await DB.collection('users').doc(user.uid).update(updateFields); 
+        await DB.collection('users').doc(user.uid).update(updateFields);
       } else {
         return res.status(200).json({
           message: 'duplicateUsername',
@@ -345,7 +363,6 @@ exports.editProfile = async (req, res, next) => {
       await DB.collection('users').doc(user.uid).update(updateFields);
     }
 
-    
     return res.status(200).json({
       message: 'userUpdated',
       userUpdated: true,
@@ -492,28 +509,43 @@ exports.sendChatmateRequest = async (req, res, next) => {
     let username;
     let profileImage;
 
-    const querySnapshot = await DB.collection('users')
-      .where('userId', '==', senderUUID).get();
+    if (senderUUID !== receiverUUID) {
 
-    querySnapshot.forEach(doc => {
-      username = doc.data().username;
-      profileImage = doc.data().profileImage;
-    });
+      const existingNotificationSnapshot = await DB.collection('notifications')
+        .where('senderId', '==', senderUUID)
+        .where('receiverId', '==', receiverUUID)
+        .where('notificationType', '==', 'Chatmate_Request')
+        .get();
 
+      if (!existingNotificationSnapshot.empty) {
+        return res.status(200).json({
+          requested: true,
+          message: 'Chatmate request already exists.'
+        });
+      }
 
-    const notificationRef = DB.collection('notifications').doc();
-    await notificationRef.set({
-      notificationId: 'notification_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-      senderName: username,
-      profileImage: profileImage || null,
-      senderId: senderUUID,
-      receiverId: receiverUUID,
-      notificationType: 'Chatmate_Request',
-      status: 'pending',
-      isRead: false,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
-    });
+      const querySnapshot = await DB.collection('users')
+        .where('userId', '==', senderUUID).get();
 
+      querySnapshot.forEach(doc => {
+        username = doc.data().username;
+        profileImage = doc.data().profileImage;
+      });
+
+      const notificationRef = DB.collection('notifications').doc();
+      await notificationRef.set({
+        notificationId: 'notification_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+        senderName: username,
+        profileImage: profileImage || null,
+        senderId: senderUUID,
+        receiverId: receiverUUID,
+        notificationType: 'Chatmate_Request',
+        status: 'pending',
+        isRead: false,
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+    }
     return res.status(200).json({
       requested: true,
     });
@@ -523,6 +555,7 @@ exports.sendChatmateRequest = async (req, res, next) => {
     res.status(500).json({ message: error.message });
   }
 }
+
 
 exports.getAllNotifications = async (req, res, next) => {
   try {
@@ -662,7 +695,7 @@ exports.checkFollowing = async (req, res, next) => {
       const chatmates = userDoc.data().chatmates || [];
       const isFollowing = chatmates.some(chatmate => chatmate.userId === otherUserUUID);
 
-      return res.status(200).json({ isFollowing });
+      return res.status(200).json({ isFollowing: true });
     } else {
       return res.status(200).json({ isFollowing: false });
     }
@@ -1143,8 +1176,11 @@ exports.getChatmates = async (req, res, next) => {
     const { userUUID } = req.params;
     const docSnapshot = await DB.collection('Chatmates').doc(userUUID).get();
 
-    const data = docSnapshot.data().chatmates;
+    let data = [];
+    if (docSnapshot.exists) {
+      data = docSnapshot.data().chatmates;
 
+    }
     res.status(200).json({
       chatmates: data,
     });
@@ -1159,26 +1195,32 @@ exports.checkMutualFriends = async (req, res, next) => {
   try {
     const { otherUserUUID, ownUserUUID } = req.params;
 
+    let mutualFriends = [];
 
-    const ownUserDoc = DB.collection('Chatmates').doc(ownUserUUID);
-    const otherUserDoc = DB.collection('Chatmates').doc(otherUserUUID);
+    const ownUserDoc = await DB.collection('Chatmates').doc(ownUserUUID).get();
+    const otherUserDoc = await DB.collection('Chatmates').doc(otherUserUUID).get();
 
-    const ownUserData = await ownUserDoc.get();
-    const otherUserData = await otherUserDoc.get();
+    if (ownUserDoc.exists && otherUserDoc.exists) {
 
-    const ownUserFriends = ownUserData.data().chatmates || [];
-    const otherUserFriends = otherUserData.data().chatmates || [];
+      const ownUserFriends = ownUserDoc.data().chatmates || [];
+      const otherUserFriends = otherUserDoc.data().chatmates || [];
 
-    const ownUserFriendIds = ownUserFriends.map(friend => friend.userId);
-    const otherUserFriendIds = otherUserFriends.map(friend => friend.userId);
+      const ownUserFriendIds = ownUserFriends.map(friend => friend.userId);
+      const otherUserFriendIds = otherUserFriends.map(friend => friend.userId);
 
-    const mutualUserIds = ownUserFriendIds.filter(userId => otherUserFriendIds.includes(userId));
+      const mutualUserIds = ownUserFriendIds.filter(userId => otherUserFriendIds.includes(userId));
 
-    const mutualFriends = ownUserFriends.filter(friend => mutualUserIds.includes(friend.userId));
+      mutualFriends = ownUserFriends.filter(friend => mutualUserIds.includes(friend.userId));
 
-    res.status(200).json({
-      friends: mutualFriends,
-    });
+      return res.status(200).json({
+        friends: mutualFriends,
+      });
+
+    } else {
+      return res.status(200).json({
+        friends: mutualFriends,
+      });
+    }
 
   } catch (error) {
     console.error(error);
@@ -1366,18 +1408,30 @@ exports.deleteCurrentTale = async (req, res, next) => {
     const uid = req.user.uid;
     const { imageURI } = req.body;
 
-    // Find the document containing the tale array
-    const userDoc = await DB.collection('users').doc(uid).get();
-    const userData = userDoc.data();
+    await DB.runTransaction(async transaction => {
+      // Find the document containing the tale array
+      const userDocRef = DB.collection('users').doc(uid);
+      const userDoc = await transaction.get(userDocRef);
+      const userData = userDoc.data();
 
-    // Remove the imageURI from the images array in the tale
-    const updatedTale = userData.tale.map(tale => ({
-      ...tale,
-      images: tale.images.filter(uri => uri !== imageURI),
-    }));
+      // Delete the image from Cloud Storage
+      const bucket = STORAGE.bucket();
+      const filePath = imageURI.split('timecapsulemessenger.appspot.com/')[1].split('?')[0];
+      const fileRef = bucket.file(filePath);
+      await fileRef.delete();
 
-    // Update the document with the modified tale array
-    await DB.collection('users').doc(uid).update({ tale: updatedTale });
+      // Remove the imageURI from the images array in the tale
+      const updatedTale = userData.tale.map(tale => {
+        const updatedImages = tale.images.filter(uri => uri !== imageURI);
+        return {
+          ...tale,
+          images: updatedImages,
+        };
+      }).filter(tale => tale.images.length > 0);
+
+      // Update the document with the modified tale array
+      transaction.update(userDocRef, { tale: updatedTale });
+    });
 
     return res.status(200).json({
       deleted: true,
@@ -1386,7 +1440,8 @@ exports.deleteCurrentTale = async (req, res, next) => {
     console.error(error);
     res.status(500).json({ message: error.message });
   }
-}
+};
+
 
 
 exports.muteUser = async (req, res, next) => {
