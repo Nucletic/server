@@ -504,10 +504,18 @@ exports.AccountPrivacy = async (req, res, next) => {
 
 exports.sendChatmateRequest = async (req, res, next) => {
   try {
-    const senderUUID = req.body.senderUUID;
-    const receiverUUID = req.params.receiverId;
+    let senderUUID = req.body.senderUUID;
+    let receiverUUID = req.params.receiverId;
     let username;
     let profileImage;
+
+    if (senderUUID.length > 36) {
+      senderUUID = senderUUID.split("\"")[1]
+    }
+
+    if (receiverUUID.length > 36) {
+      receiverUUID = receiverUUID.split("\"")[1]
+    }
 
     if (senderUUID !== receiverUUID) {
 
@@ -531,6 +539,7 @@ exports.sendChatmateRequest = async (req, res, next) => {
         username = doc.data().username;
         profileImage = doc.data().profileImage;
       });
+
 
       const notificationRef = DB.collection('notifications').doc();
       await notificationRef.set({
