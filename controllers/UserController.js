@@ -704,7 +704,7 @@ exports.checkFollowing = async (req, res, next) => {
       const chatmates = userDoc.data().chatmates || [];
       const isFollowing = chatmates.some(chatmate => chatmate.userId === otherUserUUID);
 
-      return res.status(200).json({ isFollowing: true });
+      return res.status(200).json({ isFollowing: (isFollowing ? isFollowing : false) });
     } else {
       return res.status(200).json({ isFollowing: false });
     }
