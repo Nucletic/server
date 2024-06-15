@@ -48,8 +48,12 @@ router.patch('/users/clearAllRecentSearches/:CustomUUID', userController.verifyT
 router.patch('/users/markNotificationsAsRead/:CustomUUID/:notificationId', userController.verifyToken, userController.grantAccess('updateOwn', 'Notifications'), userController.markNotificationsAsRead);
 router.get('/users/checkBlockedUser/:TargetUUID', userController.verifyToken, userController.grantAccess('readOwn', 'profile'), userController.checkBlockedUser);
 router.delete('/users/deleteCurrentTale/', userController.verifyToken, userController.grantAccess('updateOwn', 'profile'), userController.deleteCurrentTale);
+router.delete('/users/deleteTimedOutTale', userController.verifyToken, userController.grantAccess('updateOwn', 'profile'), userController.deleteTimedOutTale);
 router.patch('/users/Mute/:MuteUUID', userController.verifyToken, userController.grantAccess('updateOwn', 'profile'), userController.muteUser);
 router.patch('/users/unMuteUser/:MuteUUID', userController.verifyToken, userController.grantAccess('updateOwn', 'profile'), userController.unMuteUser);
 router.get('/users/checkMutedUser/:MuteUUID', userController.verifyToken, userController.grantAccess('updateOwn', 'profile'), userController.checkMutedUser);
 router.patch('/users/removeChatmate/:SenderUUID/:CustomUUID', userController.verifyToken, userController.grantAccess('updateOwn', 'profile'), userController.removeChatmate);
+
+
+router.post('/users/sendNotification', userController.verifyToken, userController.sendNotification);
 module.exports = router;

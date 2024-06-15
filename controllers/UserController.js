@@ -6,6 +6,8 @@ const uuid = require('uuid');
 const WebSocket = require('ws');
 const { recommendUsers } = require('../UserRecommendationSystem');
 const { arrayUnion, arrayRemove, doc } = require('firebase/firestore');
+const { sendMobileNotification } = require('../SendNotification');
+
 const wss = new WebSocket.Server({ port: 8080 });
 
 const MailConfig = {
@@ -599,13 +601,15 @@ exports.getAllNotifications = async (req, res, next) => {
 exports.AcceptChatmateRequest = async (req, res, next) => {
   try {
     const { SenderUUID, ReciverUUID } = req.body;
-    console.log(SenderUUID, ReciverUUID);
 
     const senderSnapshot = await DB.collection('users').where('userId', '==', SenderUUID).get();
     const receiverSnapshot = await DB.collection('users').where('userId', '==', ReciverUUID).get();
 
     const senderName = senderSnapshot.docs[0].data().name;
+    const senderUsername = senderSnapshot.docs[0].data().username;
+    const senderExpoPushToken = senderSnapshot.docs[0].data().ExpoPushToken;
     const receiverName = receiverSnapshot.docs[0].data().name;
+    const receiverUsername = receiverSnapshot.docs[0].data().username;
     const senderProfileImage = senderSnapshot.docs[0].data().profileImage;
     const receiverProfileImage = receiverSnapshot.docs[0].data().profileImage;
 
@@ -633,17 +637,36 @@ exports.AcceptChatmateRequest = async (req, res, next) => {
       const senderChatmates = (senderDoc.exists ? senderDoc.data().chatmates : []) || [];
       const receiverChatmates = (receiverDoc.exists ? receiverDoc.data().chatmates : []) || [];
 
-      const updatedSenderChatmates = [...senderChatmates, { userId: ReciverUUID, name: receiverName, profileImage: receiverProfileImage || null, }];
-      const updatedReceiverChatmates = [...receiverChatmates, { userId: SenderUUID, name: senderName, profileImage: senderProfileImage || null, }];
+    const isAlreadySenderChatmate = senderChatmates.some(chatmate => chatmate.userId === ReciverUUID);
+      const isAlreadyReceiverChatmate = receiverChatmates.some(chatmate => chatmate.userId === SenderUUID);
 
-      transaction.update(senderFollowersRef, { chatmates: updatedSenderChatmates });
-      transaction.update(receiverFollowersRef, { chatmates: updatedReceiverChatmates });
+      if (!isAlreadySenderChatmate) {
+        senderChatmates.push({
+          userId: ReciverUUID,
+          name: receiverName,
+          username: receiverUsername,
+          profileImage: receiverProfileImage || null,
+        });
+        transaction.update(senderFollowersRef, { chatmates: senderChatmates });
+      }
 
-      const senderUserRef = (await DB.collection('users').where('userId', '==', SenderUUID).get()).docs[0].ref;
-      const receiverUserRef = (await DB.collection('users').where('userId', '==', ReciverUUID).get()).docs[0].ref;
+      if (!isAlreadyReceiverChatmate) {
+        receiverChatmates.push({
+          userId: SenderUUID,
+          name: senderName,
+          username: senderUsername,
+          profileImage: senderProfileImage || null,
+        });
+        transaction.update(receiverFollowersRef, { chatmates: receiverChatmates });
+      }
 
-      transaction.update(senderUserRef, { chatmateCount: admin.firestore.FieldValue.increment(1) });
-      transaction.update(receiverUserRef, { chatmateCount: admin.firestore.FieldValue.increment(1) });
+      if (!isAlreadySenderChatmate || !isAlreadyReceiverChatmate) {
+        const senderUserRef = (await DB.collection('users').where('userId', '==', SenderUUID).get()).docs[0].ref;
+        const receiverUserRef = (await DB.collection('users').where('userId', '==', ReciverUUID).get()).docs[0].ref;
+
+        transaction.update(senderUserRef, { chatmateCount: admin.firestore.FieldValue.increment(1) });
+        transaction.update(receiverUserRef, { chatmateCount: admin.firestore.FieldValue.increment(1) });
+      }
 
       querySnapshot.forEach((doc) => {
         batch.update(doc.ref, { notificationType: 'accepted' });
@@ -656,6 +679,7 @@ exports.AcceptChatmateRequest = async (req, res, next) => {
       await transactionFunction(transaction);
       await batch.commit();
     });
+    await sendMobileNotification({ Type: 'ACCEPTED_REQUEST', ExpoPushToken: senderExpoPushToken, username: receiverUsername, profileImage: receiverProfileImage })
 
     return res.status(200).json({
       accepted: true,
@@ -844,7 +868,7 @@ exports.getContactDetails = async (req, res, next) => {
     const querySnapshot = await DB.collection('users').where('userId', '==', CustomUUID).get();
     const ownDocRef = await DB.collection('users').doc(req.user.uid).get();
 
-    const { username, profileImage, activityStatus, lastActive, blockedUsers } = querySnapshot.docs[0].data();
+    const { username, profileImage, activityStatus, lastActive, blockedUsers, ExpoPushToken } = querySnapshot.docs[0].data();
     const ownBlockedUsers = ownDocRef.data().blockedUsers;
     const ownUserId = ownDocRef.data().userId;
 
@@ -857,6 +881,7 @@ exports.getContactDetails = async (req, res, next) => {
         profileImage: profileImage || null,
         activityStatus: activityStatus,
         lastActive: lastActive,
+        ExpoPushToken: ExpoPushToken,
         blockedFromOurSide: blockedFromOurSide,
         blockedFromOtherSide: blockedFromOtherSide,
       },
@@ -1008,6 +1033,7 @@ exports.GetTales = async (req, res, next) => {
                 tale: data.tale,
                 username: data.username,
                 userId: data.userId,
+                ExpoPushToken: data.ExpoPushToken,
                 profileImage: data.profileImage || null,
               });
             }
@@ -1023,6 +1049,7 @@ exports.GetTales = async (req, res, next) => {
         tale: myTales,
         username: userDoc.data().username,
         userId: userDoc.data().userId,
+        ExpoPushToken: userDoc.data().ExpoPushToken,
         profileImage: userDoc.data().profileImage || null,
       },
     });
@@ -1037,7 +1064,6 @@ exports.GetTales = async (req, res, next) => {
 exports.UpdateSeenBy = async (req, res, next) => {
   try {
     const { WatcherUUID, ShowerUUID } = req.body;
-    console.log(WatcherUUID, ShowerUUID);
     const userQuerySnapshot = await DB.collection('users').where('userId', '==', ShowerUUID).get();
     const watcherQuerySnapshot = await DB.collection('users').where('userId', '==', WatcherUUID).get();
     const batch = DB.batch();
@@ -1553,4 +1579,105 @@ exports.removeChatmate = async (req, res, next) => {
   }
 }
 
+
+
+exports.deleteTimedOutTale = async (req, res, next) => {
+  try {
+    const uid = req.user.uid;
+    let imageURIs = [];
+    let talesToRemove = [];
+
+    const bucket = STORAGE.bucket();
+
+    await DB.runTransaction(async (transaction) => {
+      const userDocRef = DB.collection('users').doc(uid);
+      const userDoc = await transaction.get(userDocRef);
+      const userData = userDoc.data();
+
+      if (userData && userData.tale) {
+        talesToRemove = userData.tale.filter(tale => {
+          if (timeOutTimestamp24h(tale.createdAt)) {
+            imageURIs.push(...tale.images);
+            return true;
+          }
+          return false;
+        });
+
+        if (talesToRemove.length > 0) {
+          const updateData = {};
+          talesToRemove.forEach(tale => {
+            updateData[`tale`] = admin.firestore.FieldValue.arrayRemove(tale);
+          });
+
+          transaction.update(userDocRef, updateData);
+        }
+      }
+
+      for (const imageURI of imageURIs) {
+        try {
+          const filePath = imageURI.split('timecapsulemessenger.appspot.com/')[1].split('?')[0];
+          const fileRef = bucket.file(filePath);
+          await fileRef.delete();
+        } catch (error) {
+          console.error(`Failed to delete image ${imageURI}:`, error.message);
+        }
+      }
+    });
+
+    return res.status(200).json({ deleted: true });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+
+
+
+const timeOutTimestamp24h = (timestamp) => {
+  const timestampDate = new Date(timestamp.seconds * 1000 + timestamp.nanoseconds / 1000000);
+  const now = new Date();
+  const differenceInMillis = now - timestampDate;
+  const differenceInHours = differenceInMillis / (1000 * 60 * 60);
+  return differenceInHours >= 24;
+};
+
+
+exports.sendNotification = async (req, res, next) => {
+  try {
+    if (req.body.Type === 'MESSAGE_SENT') {
+
+      await sendMobileNotification(req.body);
+
+      return res.status(200).json({ notificationSent: true });
+
+
+    } else if (req.body.Type === 'CHATMATE_REQUEST') {
+
+      await sendMobileNotification(req.body);
+
+      return res.status(200).json({ notificationSent: true });
+
+    } else if (req.body.Type === 'TALE_REPLY') {
+
+      await sendMobileNotification(req.body);
+
+      return res.status(200).json({ notificationSent: true });
+
+    } else if (req.body.Type === 'TALE_LIKED') {
+
+      await sendMobileNotification(req.body);
+
+      return res.status(200).json({ notificationSent: true });
+
+    } else {
+      return res.status(500).json({ notificationSent: false });
+    }
+
+
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: error.message });
+  }
+}
 
